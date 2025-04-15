@@ -1,4 +1,5 @@
 *.jou
 *.log
+*.hex
 .Xil
 vivado_project

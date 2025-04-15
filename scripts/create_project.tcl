@@ -14,9 +14,12 @@ if {[file exists "$proj_dir/$proj_name.xpr"]} {
     create_project $proj_name $proj_dir -part $part -force
 }
 
-add_files [glob -nocomplain "$src_dir/*.v"]
+add_files [glob -nocomplain "$src_dir/*.sv"]
+# add_files [glob -nocomplain "$src_dir/*.svh"]
 add_files -fileset constrs_1 [glob -nocomplain "$constr_dir/*.xdc"]
 
 set_property top workbench [current_fileset]
 
 update_compile_order -fileset sources_1
+
+# Run via `vivado -mode batch -source scripts/create_project.tcl`
