@@ -46,73 +46,64 @@ module CU(
     output control_signal_t control_signal
 );
 
-    control_signal_t control_signal_reg;
-    assign control_signal = control_signal_reg;
-    assign alu_opcode = opcode[3:0];;
+    logic op_nop = opcode == 8'b00000000;
+    logic op_hlt = opcode == 8'b00000011;
+    logic op_jmpr = opcode == 8'b00100000;
+    logic op_jmpa = opcode == 8'b01000000;
+    logic op_add = opcode == 8'b10000000;
+    logic op_sub = opcode == 8'b10000001;
+    logic op_mul = opcode == 8'b10000010;
+    // logic op_div = opcode == 8'b10000011;
+    logic op_and = opcode == 8'b10000100;
+    logic op_or = opcode == 8'b10000110;
+    logic op_xor = opcode == 8'b10000111;
+    logic op_shl = opcode == 8'b10001000;
+    logic op_shr = opcode == 8'b10001001;
+    logic op_shra = opcode == 8'b10001010;
+    // logic op_mod = opcode == 8'b10001100;
+    logic op_cpy = opcode == 8'b10010000;
+    logic op_addi = opcode == 8'b10100000;
+    logic op_subi = opcode == 8'b10100001;
+    logic op_cpyi = opcode == 8'b10110000;
+    logic op_jer = opcode == 8'b10110010;
+    logic op_jner = opcode == 8'b10110011;
+    logic op_jlr = opcode == 8'b10110100;
+    logic op_jler = opcode == 8'b10110101;
+    logic op_stoa = opcode == 8'b11010000;
+    logic op_loda = opcode == 8'b11010001;
 
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            control_signal_reg <= '0;
-        end else begin
-            control_signal_reg <= '0;
+    logic has_immediate = opcode[5];
+    logic is_plain_arithmatic =
+        (opcode >= 8'b10000000 && opcode < 8'b10010000)
+        || (opcode >= 8'b10100000 && opcode < 8'b10110000);
+    logic is_valid_opcode =
+        op_nop | op_hlt | op_jmpr | op_jmpa |
+        op_add | op_sub | op_mul | op_and | op_or | op_xor |
+        op_shl | op_shr | op_shra | op_cpy |
+        op_addi | op_subi | op_cpyi |
+        op_jer | op_jner | op_jlr | op_jler |
+        op_stoa | op_loda;
 
-            case (opcode)
-                8'b00000000: begin // nop
-                    control_signal_reg <= '{default:0};
-                end
-                8'b00000011: begin // hlt
-                    control_signal_reg <= '{default:0, halt:1'b1};
-                end
+    assign control_signal.halt = !rst & (op_hlt | !is_valid_opcode);
+    assign control_signal.rsrc1_special = 0;
+    assign control_signal.rdest_special = 0;
+    assign control_signal.alu_b_use_immediate = !rst & has_immediate;
+    assign control_signal.write_register_src = rst ? WR_NO_WRITE_SRC :
+        (has_immediate & is_plain_arithmatic) ? WR_WRITE_SRC_RDEST :
+        is_plain_arithmatic ? WR_WRITE_SRC_RDEST :
+        op_cpy ? WR_WRITE_SRC_RSRC2 :
+        op_cpyi ? WR_WRITE_SRC_IMMEDIATE :
+        op_loda ? WR_WRITE_SRC_MEMORY : WR_NO_WRITE_SRC;
+    assign control_signal.write_memory_src = !rst & op_stoa ? WM_WRITE_SRC_RSRC1 : WM_NO_WRITE_SRC;
+    assign control_signal.jmp_src = rst ? JS_NO_JUMP_SRC :
+        op_jmpr ? JS_JUMP_SRC_IMMEDIATE :
+        op_jmpa ? JS_JUMP_SRC_ADDR :
+        op_jer ? JS_JUMP_SRC_IMMEDIATE :
+        op_jner ? JS_JUMP_SRC_IMMEDIATE :
+        op_jlr ? JS_JUMP_SRC_IMMEDIATE :
+        op_jler ? JS_JUMP_SRC_IMMEDIATE : JS_NO_JUMP_SRC;
+    assign control_signal.jump_condition = rst ? JC_ALWAYS : opcode[2:0];
 
-                8'b00100000: // jmpr
-                    control_signal_reg.jmp_src <= JS_JUMP_SRC_IMMEDIATE;
-
-                8'b01000000: // jmpa
-                    control_signal_reg.jmp_src <= JS_JUMP_SRC_ADDR;
-
-                8'b10000000, // add
-                8'b10000001, // sub
-                8'b10000010, // mul
-                // 8'b10000011, // div
-                8'b10000100, // and
-                8'b10000110, // or
-                8'b10000111, // xor
-                8'b10001000, // shl
-                8'b10001001, // shr
-                8'b10001010: // shra
-                // 8'b10001100: // mod
-                    control_signal_reg.write_register_src <= WR_WRITE_SRC_RDEST;
-
-                8'b10010000: // cpy
-                    control_signal_reg.write_register_src <= WR_WRITE_SRC_RSRC2;
-
-                8'b10100000, // addi
-                8'b10100001: // subi
-                begin
-                    control_signal_reg.alu_b_use_immediate <= 1'b1;
-                    control_signal_reg.write_register_src <= WR_WRITE_SRC_RDEST;
-                end
-
-                8'b10110000: // cpyi
-                    control_signal_reg.write_register_src <= WR_WRITE_SRC_IMMEDIATE;
-
-                8'b10110010, // jer
-                8'b10110011, // jner
-                8'b10110100, // jlr
-                8'b10110101: // jler
-                begin
-                    control_signal_reg.jmp_src <= JS_JUMP_SRC_IMMEDIATE;
-                    control_signal_reg.jump_condition <= opcode[2:0];
-                end
-
-                8'b11010000: // stoa
-                    control_signal_reg.write_memory_src <= WM_WRITE_SRC_RSRC1;
-
-                8'b11010001: // loda
-                    control_signal_reg.write_register_src <= WR_WRITE_SRC_MEMORY;
-
-                default: control_signal_reg.halt <= 1'b1;
-            endcase
-        end
-    end
+    assign alu_opcode = opcode[3:0];
+    
 endmodule

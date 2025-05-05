@@ -20,8 +20,8 @@ module Core(
 
     cpu_state_t state;
 
-    logic [31:0] gp_registers[0:7];
-    logic [31:0] special_registers[0:7];
+    (* ram_style = "distributed" *) logic [31:0] gp_registers[0:7];
+    (* ram_style = "distributed" *) logic [31:0] special_registers[0:7];
 
     logic [3:0] rsrc1;
     logic [3:0] rsrc2;
@@ -65,7 +65,22 @@ module Core(
             default: enable_jump <= 1'b0; // Invalid state
         endcase
     end
-    
+
+    logic [31:0] ip_inc;
+    always_comb begin
+        unique case (data_in[7:5])
+            3'b000: ip_inc = 1;
+            3'b001: ip_inc = 2;
+            3'b010: ip_inc = 1;
+            3'b011: ip_inc = 2;
+            3'b100: ip_inc = 2;
+            3'b101: ip_inc = 3;
+            3'b110: ip_inc = 2;
+            default: ip_inc = 0; // Invalid state
+        endcase
+    end
+
+    logic [31:0] ip_next;
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -81,28 +96,25 @@ module Core(
         end else begin
             case (state)
                 FETCH: begin
+                    (* use_dsp = "yes" *) ip_next = special_registers[0] + ip_inc;
                     opcode <= data_in[7:0];
                     debug_out <= data_in[7:0];
                     case (data_in[7:5])
                         3'b000: begin // No extra values
-                            special_registers[0] <= special_registers[0] + 1;
                             state <= DECODE;
                         end
                         3'b001: begin // Immediate
                             // For now, assume 8 bits. This may change in the future
                             immediate <= {24'b0, data_in[15:8]};
-                            special_registers[0] <= special_registers[0] + 2;
                             state <= DECODE;
                         end
                         3'b010: begin // Address
-                            special_registers[0] <= special_registers[0] + 1;
-                            address <= special_registers[0] + 1;
+                            address <= ip_next;
                             state <= FETCH_IMEM;
                         end
                         3'b011: begin // Immediate + Address
                             immediate <= {24'b0, data_in[15:8]};
-                            special_registers[0] <= special_registers[0] + 2;
-                            address <= special_registers[0] + 2;
+                            address <= ip_next;
                             state <= FETCH_IMEM;
                         end
                         3'b100: begin // Register
@@ -110,7 +122,6 @@ module Core(
                             rsrc2 <= data_in[11:8];
                             // Let's assume that the first source is also the destination
                             rdest <= data_in[15:12];
-                            special_registers[0] <= special_registers[0] + 2;
                             state <= DECODE;
                         end
                         3'b101: begin // Register + Immediate
@@ -118,21 +129,20 @@ module Core(
                             rsrc2 <= data_in[11:8];
                             rdest <= data_in[15:12];
                             immediate <= {24'b0, data_in[23:16]};
-                            special_registers[0] <= special_registers[0] + 3;
                             state <= DECODE;
                         end
                         3'b110: begin // Register + Address
                             rsrc1 <= data_in[15:12];
                             rsrc2 <= data_in[11:8];
                             rdest <= data_in[15:12];
-                            address <= special_registers[0] + 2;
-                            special_registers[0] <= special_registers[0] + 2;
+                            address <= ip_next;
                             state <= FETCH_IMEM;
                         end
                         3'b111: begin // Invalid state
                             state <= HALT;
                         end
                     endcase
+                    special_registers[0] <= ip_next;
                 end
                 FETCH_IMEM: begin
                     debug_out <= 8'b00000010;
@@ -200,37 +210,18 @@ module Core(
         end
     end
 
-
     task automatic write_gp_register;
         input [2:0] index;
         input [31:0] value;
         begin
-            case (index)
-                3'd0: gp_registers[0] <= value;
-                3'd1: gp_registers[1] <= value;
-                3'd2: gp_registers[2] <= value;
-                3'd3: gp_registers[3] <= value;
-                3'd4: gp_registers[4] <= value;
-                3'd5: gp_registers[5] <= value;
-                3'd6: gp_registers[6] <= value;
-                3'd7: gp_registers[7] <= value;
-            endcase
+            gp_registers[index] <= value;
         end
     endtask
 
     function [31:0] lookup_gp_register;
         input [2:0] index;
         begin
-            case (index)
-                3'd0: lookup_gp_register = gp_registers[0];
-                3'd1: lookup_gp_register = gp_registers[1];
-                3'd2: lookup_gp_register = gp_registers[2];
-                3'd3: lookup_gp_register = gp_registers[3];
-                3'd4: lookup_gp_register = gp_registers[4];
-                3'd5: lookup_gp_register = gp_registers[5];
-                3'd6: lookup_gp_register = gp_registers[6];
-                3'd7: lookup_gp_register = gp_registers[7];
-            endcase
+            lookup_gp_register = gp_registers[index];
         end
     endfunction
 
@@ -242,7 +233,7 @@ module Core(
         begin
             imm8 = immediate[7:0];
             sign_extended_imm = {{24{imm8[7]}}, imm8};
-            add_immediate_8 = value + sign_extended_imm;
+            (* use_dsp = "yes" *) add_immediate_8 = value + sign_extended_imm;
         end
     endfunction
 
