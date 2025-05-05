@@ -1,4 +1,4 @@
-typedef enum reg [2:0] {
+typedef enum logic [2:0] {
     FETCH = 3'b000,
     FETCH_IMEM = 3'b001,
     DECODE = 3'b010,
@@ -12,31 +12,31 @@ module Core(
     input clk,
     input rst,
     input [31:0] data_in,
-    output reg [31:0] data_out,
-    output reg [31:0] address,
-    output reg write_enable,
-    output reg [7:0] debug_out
+    output logic [31:0] data_out,
+    output logic [31:0] address,
+    output logic write_enable,
+    output logic [7:0] debug_out
 );
 
     cpu_state_t state;
 
-    reg [31:0] gp_registers[0:7];
-    reg [31:0] special_registers[0:7];
+    logic [31:0] gp_registers[0:7];
+    logic [31:0] special_registers[0:7];
 
-    reg [3:0] rsrc1;
-    reg [3:0] rsrc2;
-    reg [3:0] rdest;
+    logic [3:0] rsrc1;
+    logic [3:0] rsrc2;
+    logic [3:0] rdest;
 
-    reg [31:0] immediate;
-    reg [31:0] imem;
+    logic [31:0] immediate;
+    logic [31:0] imem;
 
-    reg [7:0] opcode;
+    logic [7:0] opcode;
     control_signal_t control_signal;
-    wire [3:0] alu_opcode;
+    logic [3:0] alu_opcode;
 
-    wire[31:0] rsrc1_value = lookup_gp_register(rsrc1);
-    wire[31:0] rsrc2_value = lookup_gp_register(rsrc2);
-    reg [31:0] alu_result;
+    logic[31:0] rsrc1_value;
+    logic[31:0] rsrc2_value;
+    logic [31:0] alu_result;
 
     CU cu (
         .clk(clk),
@@ -100,7 +100,7 @@ module Core(
                             state <= FETCH_IMEM;
                         end
                         3'b011: begin // Immediate + Address
-                            immediate <= data_in[15:8];
+                            immediate <= {24'b0, data_in[15:8]};
                             special_registers[0] <= special_registers[0] + 2;
                             address <= special_registers[0] + 2;
                             state <= FETCH_IMEM;
@@ -117,7 +117,7 @@ module Core(
                             rsrc1 <= data_in[15:12];
                             rsrc2 <= data_in[11:8];
                             rdest <= data_in[15:12];
-                            immediate <= data_in[23:16];
+                            immediate <= {24'b0, data_in[23:16]};
                             special_registers[0] <= special_registers[0] + 3;
                             state <= DECODE;
                         end
@@ -142,7 +142,8 @@ module Core(
                 end
                 DECODE: begin
                     debug_out <= 8'b00000011;
-                    // TODO: What to do?
+                    rsrc1_value = lookup_gp_register(rsrc1);
+                    rsrc2_value = lookup_gp_register(rsrc2);
                     state <= EXECUTE;
                 end
                 EXECUTE: begin
@@ -236,8 +237,8 @@ module Core(
     function [31:0] add_immediate_8;
         input [31:0] value;
         input [31:0] immediate;
-        reg [7:0] imm8;
-        reg signed [31:0] sign_extended_imm;
+        logic [7:0] imm8;
+        logic signed [31:0] sign_extended_imm;
         begin
             imm8 = immediate[7:0];
             sign_extended_imm = {{24{imm8[7]}}, imm8};

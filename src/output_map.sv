@@ -1,12 +1,12 @@
 module OutputMap(
     input clk,
-    input reg [31:0] output_address,
-    input reg [31:0] output_in,
-    input reg [1:0] output_size,
-    input reg output_write_enable,
-    output wire [31:0] output_out,
+    input logic [31:0] output_address,
+    input logic [31:0] output_in,
+    input logic [1:0] output_size,
+    input logic output_write_enable,
+    output logic [31:0] output_out,
 
-    output reg [7:0] led
+    output logic [7:0] led
 );
 
     always_ff @(posedge clk) begin

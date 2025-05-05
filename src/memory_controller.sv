@@ -1,29 +1,29 @@
 module MemoryController(
     input clk,
-    input wire [31:0] address,
-    input wire write_enable,
-    input wire [1:0] data_in_size,
-    input wire [1:0] data_out_size,
-    input wire [31:0] data_in,
-    output wire [31:0] data_out,
-    output wire memory_error,
+    input logic [31:0] address,
+    input logic write_enable,
+    input logic [1:0] data_in_size,
+    input logic [1:0] data_out_size,
+    input logic [31:0] data_in,
+    output logic [31:0] data_out,
+    output logic memory_error,
 
-    input wire [31:0] code_in,
-    output wire [31:0] code_address,
+    input logic [31:0] code_in,
+    output logic [31:0] code_address,
 
-    input wire [31:0] memory_in,
-    output wire [31:0] memory_address,
-    output wire [31:0] memory_out,
-    output wire [1:0] memory_size,
-    output wire memory_write_enable,
+    input logic [31:0] memory_in,
+    output logic [31:0] memory_address,
+    output logic [31:0] memory_out,
+    output logic [1:0] memory_size,
+    output logic memory_write_enable,
 
-    input wire [31:0] input_in,
+    input logic [31:0] input_in,
 
-    input wire [31:0] output_in,
-    output wire [31:0] output_address,
-    output wire [31:0] output_out,
-    output wire [1:0] output_size,
-    output wire output_write_enable
+    input logic [31:0] output_in,
+    output logic [31:0] output_address,
+    output logic [31:0] output_out,
+    output logic [1:0] output_size,
+    output logic output_write_enable
 );
 
     localparam CODE_START = 10'd0;
@@ -35,19 +35,19 @@ module MemoryController(
     localparam OUTPUT_START = 10'd516;
     localparam OUTPUT_END = 10'd519;
 
-    wire [31:0] end_addr;
-    wire is_code_range;
-    wire is_memory_range;
-    wire is_input_range;
-    wire is_output_range;
+    logic [31:0] end_addr;
+    logic is_code_range;
+    logic is_memory_range;
+    logic is_input_range;
+    logic is_output_range;
     assign end_addr = end_address(address, write_enable ? data_in_size : data_out_size);
     assign is_code_range = (address >= CODE_START && end_addr <= CODE_END);
     assign is_memory_range = (address >= MEMORY_START && end_addr <= MEMORY_END);
     assign is_input_range = (address >= INPUT_START && end_addr <= INPUT_END);
     assign is_output_range = (address >= OUTPUT_START && end_addr <= OUTPUT_END);
 
-    wire [1:0] align_size;
-    wire is_not_aligned;
+    logic [1:0] align_size;
+    logic is_not_aligned;
     assign align_size = write_enable ? data_in_size : data_out_size;
     assign is_not_aligned =
         align_size == 2'b00 ? 1'b0 :
@@ -55,7 +55,7 @@ module MemoryController(
         (align_size == 2'b10) && (|address[1:0]) ? 1'b1 :
         1'b0;
 
-    wire bad_data_size;
+    logic bad_data_size;
     assign bad_data_size = write_enable ? (data_in_size == 2'b11) : (data_out_size == 2'b11);
     assign memory_error =
         (is_not_aligned && !is_code_range)
@@ -63,7 +63,7 @@ module MemoryController(
         || (write_enable && !(is_memory_range || is_output_range))
         || (!write_enable && !(is_code_range || is_memory_range || is_input_range || is_output_range));
 
-    wire [31:0] input_address;
+    logic [31:0] input_address;
     assign code_address = address - CODE_START;
     assign memory_address = address - MEMORY_START;
     assign input_address = address - INPUT_START;
@@ -77,7 +77,7 @@ module MemoryController(
     assign memory_out = data_in;
     assign output_out = data_in;
 
-    wire [31:0] data_out_raw;
+    logic [31:0] data_out_raw;
     assign data_out_raw =
         memory_error || write_enable ? 32'b0 :
         is_code_range ? code_in :

@@ -1,21 +1,21 @@
 module workbench(
     input clk,
     input btnU,
-    input wire [15:0] sw,
-    output wire [15:0] led
+    input logic [15:0] sw,
+    output logic [15:0] led
 );
 
-    reg rst = 1'b1;
+    logic rst = 1'b1;
 
-    reg m_clk = 1'b0;
+    logic m_clk = 1'b0;
 
-    wire a_clk;
+    logic a_clk;
     assign a_clk = sw[15] ? clk : m_clk;
 
-    wire [31:0] data_in;
-    wire [31:0] data_out;
-    wire [31:0] address;
-    wire write_enable;
+    logic [31:0] data_in;
+    logic [31:0] data_out;
+    logic [31:0] address;
+    logic write_enable;
 
     Core processor_core (
         .clk(a_clk),
@@ -27,19 +27,19 @@ module workbench(
         .debug_out(led[15:8])
     );
 
-    reg [7:0] code [0:255];
-    reg [31:0] code_address;
-    wire [31:0] code_out;
+    logic [7:0] code [0:255];
+    logic [31:0] code_address;
+    logic [31:0] code_out;
     assign code_out = {code[code_address + 3], code[code_address + 2], code[code_address + 1], code[code_address]};
     initial begin
         $readmemh("program.hex", code);
     end
 
-    wire [31:0] memory_address;
-    wire [31:0] memory_in;
-    wire [1:0] memory_size;
-    wire memory_write_enable;
-    wire [31:0] memory_out;
+    logic [31:0] memory_address;
+    logic [31:0] memory_in;
+    logic [1:0] memory_size;
+    logic memory_write_enable;
+    logic [31:0] memory_out;
 
     /*Memory memory(
         .clk(a_clk),
@@ -50,13 +50,13 @@ module workbench(
         .memory_out(memory_out)
     );*/
 
-    wire [31:0] input_in = {24'b0, sw};
+    logic [31:0] input_in = {24'b0, sw};
 
-    wire [31:0] output_in;
-    wire [31:0] output_address;
-    wire [31:0] output_out;
-    wire [1:0] output_size;
-    wire output_write_enable;
+    logic [31:0] output_in;
+    logic [31:0] output_address;
+    logic [31:0] output_out;
+    logic [1:0] output_size;
+    logic output_write_enable;
 
     OutputMap output_map(
         .clk(a_clk),
@@ -93,8 +93,8 @@ module workbench(
     );
 
 
-    reg was_pressed = 1'b0;
-    reg [26:0] debounce_counter = 27'd0;
+    logic was_pressed = 1'b0;
+    logic [26:0] debounce_counter = 27'd0;
     
     always_ff @(posedge clk) begin
         rst <= 1'b0;

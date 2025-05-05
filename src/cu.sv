@@ -48,11 +48,11 @@ module CU(
 
     control_signal_t control_signal_reg;
     assign control_signal = control_signal_reg;
+    assign alu_opcode = opcode[3:0];;
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             control_signal_reg <= '0;
-            alu_opcode <= 4'b0;
         end else begin
             control_signal_reg <= '0;
 
@@ -81,10 +81,7 @@ module CU(
                 8'b10001001, // shr
                 8'b10001010: // shra
                 // 8'b10001100: // mod
-                begin
                     control_signal_reg.write_register_src <= WR_WRITE_SRC_RDEST;
-                    alu_opcode <= opcode[3:0];
-                end
 
                 8'b10010000: // cpy
                     control_signal_reg.write_register_src <= WR_WRITE_SRC_RSRC2;
@@ -94,7 +91,6 @@ module CU(
                 begin
                     control_signal_reg.alu_b_use_immediate <= 1'b1;
                     control_signal_reg.write_register_src <= WR_WRITE_SRC_RDEST;
-                    alu_opcode <= opcode[3:0];
                 end
 
                 8'b10110000: // cpyi
