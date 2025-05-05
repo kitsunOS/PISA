@@ -10,7 +10,7 @@ module workbench(
     reg m_clk = 1'b0;
 
     wire a_clk;
-    assign a_clk = clk;
+    assign a_clk = sw[15] ? clk : m_clk;
 
     wire [31:0] data_in;
     wire [31:0] data_out;
@@ -50,7 +50,7 @@ module workbench(
         .memory_out(memory_out)
     );*/
 
-    wire [31:0] input_in = {sw, 16'b0};
+    wire [31:0] input_in = {24'b0, sw};
 
     wire [31:0] output_in;
     wire [31:0] output_address;
@@ -100,7 +100,7 @@ module workbench(
         rst <= 1'b0;
     
         if (btnU == 1'b1) begin
-            if (debounce_counter < 27'd50_000_000) begin
+            if (debounce_counter < 27'd2_000_000) begin
                 debounce_counter <= debounce_counter + 1;
             end else if (!was_pressed) begin
                 m_clk <= 1'b1;

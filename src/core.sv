@@ -34,7 +34,9 @@ module Core(
     control_signal_t control_signal;
     wire [3:0] alu_opcode;
 
-    wire [31:0] alu_result;
+    wire[31:0] rsrc1_value = lookup_gp_register(rsrc1);
+    wire[31:0] rsrc2_value = lookup_gp_register(rsrc2);
+    reg [31:0] alu_result;
 
     CU cu (
         .clk(clk),
@@ -45,11 +47,25 @@ module Core(
     );
 
     ALU alu (
+        .clk(clk),
         .opcode(alu_opcode),
-        .a(lookup_gp_register(rsrc1)),
-        .b(lookup_gp_register(rsrc2)),
+        .a(rsrc1_value),
+        .b(control_signal.alu_b_use_immediate ? immediate : rsrc2_value),
         .result(alu_result)
     );
+
+    logic enable_jump;
+    always_comb begin
+        unique case (control_signal.jump_condition)
+            JC_ALWAYS: enable_jump = 1'b1;
+            JC_IF_ZERO: enable_jump = (rsrc1_value == 32'b0);
+            JC_IF_NOT_ZERO: enable_jump = (rsrc1_value != 32'b0);
+            JC_IF_NEGATIVE: enable_jump = rsrc1_value[31];
+            JC_IF_NOT_NEGATIVE: enable_jump = ~rsrc1_value[31];
+            default: enable_jump <= 1'b0; // Invalid state
+        endcase
+    end
+    
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -74,7 +90,7 @@ module Core(
                         end
                         3'b001: begin // Immediate
                             // For now, assume 8 bits. This may change in the future
-                            immediate <= data_in[15:8];
+                            immediate <= {24'b0, data_in[15:8]};
                             special_registers[0] <= special_registers[0] + 2;
                             state <= DECODE;
                         end
@@ -90,26 +106,25 @@ module Core(
                             state <= FETCH_IMEM;
                         end
                         3'b100: begin // Register
-                            rsrc1 <= data_in[11:8];
-                            rsrc2 <= data_in[15:12];
+                            rsrc1 <= data_in[15:12];
+                            rsrc2 <= data_in[11:8];
                             // Let's assume that the first source is also the destination
-                            rdest <= data_in[11:8];
+                            rdest <= data_in[15:12];
                             special_registers[0] <= special_registers[0] + 2;
                             state <= DECODE;
                         end
                         3'b101: begin // Register + Immediate
-                            rsrc1 <= data_in[11:8];
-                            rsrc2 <= data_in[15:12];
-                            rdest <= data_in[11:8];
+                            rsrc1 <= data_in[15:12];
+                            rsrc2 <= data_in[11:8];
+                            rdest <= data_in[15:12];
                             immediate <= data_in[23:16];
                             special_registers[0] <= special_registers[0] + 3;
-                            debug_out <= 8'b01010101;
                             state <= DECODE;
                         end
                         3'b110: begin // Register + Address
-                            rsrc1 <= data_in[11:8];
-                            rsrc2 <= data_in[15:12];
-                            rdest <= data_in[11:8];
+                            rsrc1 <= data_in[15:12];
+                            rsrc2 <= data_in[11:8];
+                            rdest <= data_in[15:12];
                             address <= special_registers[0] + 2;
                             special_registers[0] <= special_registers[0] + 2;
                             state <= FETCH_IMEM;
@@ -137,6 +152,16 @@ module Core(
                     end else begin
                         address <= imem;
                         state <= MEMORY;
+
+                        if (enable_jump) begin
+                            case (control_signal.jmp_src)
+                                JS_NO_JUMP_SRC: begin end // No Jump
+                                JS_JUMP_SRC_RDEST: special_registers[0] <= lookup_gp_register(rdest);
+                                JS_JUMP_SRC_IMMEDIATE: special_registers[0] <= add_immediate_8(special_registers[0], immediate);
+                                JS_JUMP_SRC_ADDR: special_registers[0] <= imem;
+                                default: state <= HALT; // Invalid state
+                            endcase
+                        end
                     end
                 end
                 MEMORY: begin
@@ -159,7 +184,7 @@ module Core(
 
                     case (control_signal.write_register_src)
                         WR_WRITE_SRC_RDEST: write_gp_register(rdest, alu_result);
-                        WR_WRITE_SRC_RSRC2: write_gp_register(rsrc2, alu_result);
+                        WR_WRITE_SRC_RSRC2: write_gp_register(rdest, rsrc2_value);
                         WR_WRITE_SRC_MEMORY: write_gp_register(rdest, data_in);
                         WR_WRITE_SRC_IMMEDIATE: write_gp_register(rdest, immediate);
                     endcase
@@ -207,5 +232,18 @@ module Core(
             endcase
         end
     endfunction
+
+    function [31:0] add_immediate_8;
+        input [31:0] value;
+        input [31:0] immediate;
+        reg [7:0] imm8;
+        reg signed [31:0] sign_extended_imm;
+        begin
+            imm8 = immediate[7:0];
+            sign_extended_imm = {{24{imm8[7]}}, imm8};
+            add_immediate_8 = value + sign_extended_imm;
+        end
+    endfunction
+
 
 endmodule

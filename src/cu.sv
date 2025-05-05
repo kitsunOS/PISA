@@ -2,8 +2,11 @@ typedef struct packed {
     logic halt;
     logic rsrc1_special;
     logic rdest_special;
+    logic alu_b_use_immediate;
     logic [2:0] write_register_src;
     logic [1:0] write_memory_src;
+    logic [1:0] jmp_src;
+    logic [2:0] jump_condition;
 } control_signal_t;
 
 typedef enum logic [2:0] {
@@ -19,6 +22,21 @@ typedef enum logic [1:0] {
     WM_WRITE_SRC_RSRC1 = 2'd1,
     WM_WRITE_SRC_IMMEDIATE = 2'd2
 } write_memory_src_enum_t;
+
+typedef enum logic [1:0] {
+    JS_NO_JUMP_SRC = 2'd0,
+    JS_JUMP_SRC_RDEST = 2'd1,
+    JS_JUMP_SRC_IMMEDIATE = 2'd2,
+    JS_JUMP_SRC_ADDR = 2'd3
+} jump_src_enum_t;
+
+typedef enum logic [2:0] {
+    JC_ALWAYS = 3'b000,
+    JC_IF_ZERO = 3'b010,
+    JC_IF_NOT_ZERO = 3'b011,
+    JC_IF_NEGATIVE = 3'b100,
+    JC_IF_NOT_NEGATIVE = 3'b101
+} jump_condition_enum_t;
 
 module CU(
     input logic clk,
@@ -46,6 +64,12 @@ module CU(
                     control_signal_reg <= '{default:0, halt:1'b1};
                 end
 
+                8'b00100000: // jmpr
+                    control_signal_reg.jmp_src <= JS_JUMP_SRC_IMMEDIATE;
+
+                8'b01000000: // jmpa
+                    control_signal_reg.jmp_src <= JS_JUMP_SRC_ADDR;
+
                 8'b10000000, // add
                 8'b10000001, // sub
                 8'b10000010, // mul
@@ -62,11 +86,28 @@ module CU(
                     alu_opcode <= opcode[3:0];
                 end
 
-                8'b10010001: // cpy
+                8'b10010000: // cpy
                     control_signal_reg.write_register_src <= WR_WRITE_SRC_RSRC2;
 
-                8'b10100010: // cpyi
+                8'b10100000, // addi
+                8'b10100001: // subi
+                begin
+                    control_signal_reg.alu_b_use_immediate <= 1'b1;
+                    control_signal_reg.write_register_src <= WR_WRITE_SRC_RDEST;
+                    alu_opcode <= opcode[3:0];
+                end
+
+                8'b10110000: // cpyi
                     control_signal_reg.write_register_src <= WR_WRITE_SRC_IMMEDIATE;
+
+                8'b10110010, // jer
+                8'b10110011, // jner
+                8'b10110100, // jlr
+                8'b10110101: // jler
+                begin
+                    control_signal_reg.jmp_src <= JS_JUMP_SRC_IMMEDIATE;
+                    control_signal_reg.jump_condition <= opcode[2:0];
+                end
 
                 8'b11010000: // stoa
                     control_signal_reg.write_memory_src <= WM_WRITE_SRC_RSRC1;
