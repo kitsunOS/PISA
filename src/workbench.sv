@@ -15,6 +15,7 @@ module workbench(
     logic [31:0] data_in;
     logic [31:0] data_out;
     logic [31:0] address;
+    logic [1:0] data_size;
     logic write_enable;
 
     Core processor_core (
@@ -23,6 +24,7 @@ module workbench(
         .data_in(data_in),
         .data_out(data_out),
         .address(address),
+        .data_size(data_size),
         .write_enable(write_enable),
         .debug_out(led[15:8])
     );
@@ -41,14 +43,14 @@ module workbench(
     logic memory_write_enable;
     logic [31:0] memory_out;
 
-    /*Memory memory(
+    Memory memory(
         .clk(a_clk),
         .memory_address(memory_address),
         .memory_in(memory_in),
         .memory_size(memory_size),
         .memory_write_enable(memory_write_enable),
         .memory_out(memory_out)
-    );*/
+    );
 
     logic [31:0] input_in = {24'b0, sw};
 
@@ -72,8 +74,7 @@ module workbench(
         .clk(a_clk),
         .address(address),
         .write_enable(write_enable),
-        .data_in_size(2'b10), // TODO: Use proper data sizes
-        .data_out_size(2'b10), // TODO: Use proper data sizes
+        .data_size(data_size),
         .data_in(data_out),
         .data_out(data_in),
         .memory_error(), // TODO: Handle memory error
@@ -91,7 +92,6 @@ module workbench(
         .output_size(output_size),
         .output_write_enable(output_write_enable)
     );
-
 
     logic was_pressed = 1'b0;
     logic [26:0] debounce_counter = 27'd0;

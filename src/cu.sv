@@ -7,11 +7,14 @@ typedef struct packed {
     logic [1:0] write_memory_src;
     logic [1:0] jmp_src;
     logic [2:0] jump_condition;
+    logic set_mode;
+    logic [1:0] data_size;
+    logic extend_sign;
 } control_signal_t;
 
 typedef enum logic [2:0] {
     WR_NO_WRITE_SRC = 3'd0,
-    WR_WRITE_SRC_RDEST = 3'd1,
+    WR_WRITE_SRC_ALU = 3'd1,
     WR_WRITE_SRC_RSRC2 = 3'd2,
     WR_WRITE_SRC_MEMORY = 3'd3,
     WR_WRITE_SRC_IMMEDIATE = 3'd4
@@ -25,7 +28,7 @@ typedef enum logic [1:0] {
 
 typedef enum logic [1:0] {
     JS_NO_JUMP_SRC = 2'd0,
-    JS_JUMP_SRC_RDEST = 2'd1,
+    JS_JUMP_SRC_RSRC1 = 2'd1,
     JS_JUMP_SRC_IMMEDIATE = 2'd2,
     JS_JUMP_SRC_ADDR = 2'd3
 } jump_src_enum_t;
@@ -62,6 +65,7 @@ module CU(
     logic op_shra = opcode == 8'b10001010;
     // logic op_mod = opcode == 8'b10001100;
     logic op_cpy = opcode == 8'b10010000;
+    logic op_jmpto = opcode == 8'b10011000;
     logic op_addi = opcode == 8'b10100000;
     logic op_subi = opcode == 8'b10100001;
     logic op_cpyi = opcode == 8'b10110000;
@@ -71,6 +75,7 @@ module CU(
     logic op_jler = opcode == 8'b10110101;
     logic op_stoa = opcode == 8'b11010000;
     logic op_loda = opcode == 8'b11010001;
+    logic op_smode = opcode[7:5] == 3'b111;
 
     logic has_immediate = opcode[5];
     logic is_plain_arithmatic =
@@ -79,18 +84,18 @@ module CU(
     logic is_valid_opcode =
         op_nop | op_hlt | op_jmpr | op_jmpa |
         op_add | op_sub | op_mul | op_and | op_or | op_xor |
-        op_shl | op_shr | op_shra | op_cpy |
+        op_shl | op_shr | op_shra | op_cpy | op_jmpto |
         op_addi | op_subi | op_cpyi |
         op_jer | op_jner | op_jlr | op_jler |
-        op_stoa | op_loda;
+        op_stoa | op_loda |
+        op_smode;
 
     assign control_signal.halt = !rst & (op_hlt | !is_valid_opcode);
     assign control_signal.rsrc1_special = 0;
     assign control_signal.rdest_special = 0;
     assign control_signal.alu_b_use_immediate = !rst & has_immediate;
     assign control_signal.write_register_src = rst ? WR_NO_WRITE_SRC :
-        (has_immediate & is_plain_arithmatic) ? WR_WRITE_SRC_RDEST :
-        is_plain_arithmatic ? WR_WRITE_SRC_RDEST :
+        is_plain_arithmatic ? WR_WRITE_SRC_ALU :
         op_cpy ? WR_WRITE_SRC_RSRC2 :
         op_cpyi ? WR_WRITE_SRC_IMMEDIATE :
         op_loda ? WR_WRITE_SRC_MEMORY : WR_NO_WRITE_SRC;
@@ -101,8 +106,13 @@ module CU(
         op_jer ? JS_JUMP_SRC_IMMEDIATE :
         op_jner ? JS_JUMP_SRC_IMMEDIATE :
         op_jlr ? JS_JUMP_SRC_IMMEDIATE :
-        op_jler ? JS_JUMP_SRC_IMMEDIATE : JS_NO_JUMP_SRC;
+        op_jler ? JS_JUMP_SRC_IMMEDIATE :
+        op_jmpto ? JS_JUMP_SRC_RSRC1 :
+        JS_NO_JUMP_SRC;
     assign control_signal.jump_condition = rst ? JC_ALWAYS : opcode[2:0];
+    assign control_signal.set_mode = rst ? 1'b0 : op_smode;
+    assign control_signal.data_size = rst ? 2'b00 : opcode[1:0];
+    assign control_signal.extend_sign = rst ? 1'b0 : opcode[4];
 
     assign alu_opcode = opcode[3:0];
     
