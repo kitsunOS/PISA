@@ -1,5 +1,4 @@
 module MemoryController(
-    input clk,
     input logic [31:0] address,
     input logic write_enable,
     input logic [1:0] data_size,

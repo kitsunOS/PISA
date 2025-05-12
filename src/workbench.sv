@@ -71,7 +71,6 @@ module workbench(
     );
 
     MemoryController mem_controller (
-        .clk(a_clk),
         .address(address),
         .write_enable(write_enable),
         .data_size(data_size),

@@ -36,19 +36,21 @@ module Core(
     control_signal_t control_signal;
     logic [3:0] alu_opcode;
 
-    logic[31:0] rsrc1_value;
-    logic[31:0] rsrc2_value;
+    logic [31:0] rsrc1_value;
+    logic [31:0] rsrc2_value;
     logic [31:0] alu_result;
 
     logic [1:0] internal_data_size;
     logic extend_sign;
 
+    control_signal_t control_signal_inst;
+    logic [3:0] alu_opcode_inst;
+    logic [31:0] alu_result_inst;
+
     CU cu (
-        .clk(clk),
-        .rst(rst),
         .opcode(opcode),
-        .control_signal(control_signal),
-        .alu_opcode(alu_opcode)
+        .control_signal(control_signal_inst),
+        .alu_opcode(alu_opcode_inst)
     );
 
     ALU alu (
@@ -56,8 +58,14 @@ module Core(
         .opcode(alu_opcode),
         .a(rsrc1_value),
         .b(control_signal.alu_b_use_immediate ? immediate : rsrc2_value),
-        .result(alu_result)
+        .result(alu_result_inst)
     );
+
+    always_ff @(posedge clk) begin
+        alu_opcode <= alu_opcode_inst;
+        alu_result <= alu_result_inst;
+        control_signal <= control_signal_inst;
+    end
 
     logic enable_jump;
     always_comb begin
@@ -91,7 +99,120 @@ module Core(
     (* use_dsp = "yes" *) assign ip_next = special_registers[0] + ip_inc;
     (* use_dsp = "yes" *) assign ip_p4 = special_registers[0] + 4;
 
-    always_ff @(posedge clk or posedge rst) begin
+    always_ff @(posedge clk) begin
+        case (state)
+            // TODO: If at edge of memory, 4 bytes could wrongly result in error
+            FETCH: begin
+                opcode <= data_in[7:0];
+                debug_out <= data_in[7:0];
+                data_size <= internal_data_size;
+
+                state <= DECODE;
+                if (opcode_type != 3'b111) begin
+                    if (opcode_type[2]) begin
+                        rsrc1 <= data_in[15:12];
+                        rsrc2 <= data_in[11:8];
+                        // Let's assume that the first source is also the destination
+                        rdest <= data_in[15:12];
+                    end
+                    if (opcode_type[1]) begin
+                        data_size <= 2'b10;
+                        state <= FETCH_IMEM;
+                    end
+                    if (opcode_type[0]) begin
+                        if (internal_data_size[1]) begin
+                            data_size <= 2'b10;
+                            state <= FETCH_IMM;
+                        end else begin
+                            immediate <= enforce_constraints(internal_data_size[0] ?
+                                opcode_type[2] ? {16'b0, data_in[31:16]} : {16'b0, data_in[23:8]} :
+                                opcode_type[2] ? {24'b0, data_in[23:16]} : {24'b0, data_in[15:8]});
+                        end
+                    end
+                end
+                address <= ip_next;
+                special_registers[0] <= ip_next;
+            end
+            FETCH_IMM: begin
+                debug_out <= 8'b00000001;
+                immediate <= enforce_constraints({24'b0, data_in[15:8]});
+                data_size <= opcode_type[1] ? 2'b10 : internal_data_size;
+                address <= ip_p4;
+                special_registers[0] <= ip_p4;
+                state <= opcode_type[1] ? FETCH_IMEM : DECODE;
+            end
+            FETCH_IMEM: begin
+                debug_out <= 8'b00000010;
+                imem <= data_in;
+                data_size <= internal_data_size;
+                address <= ip_p4;
+                special_registers[0] <= ip_p4;
+                state <= DECODE;
+            end
+            DECODE: begin
+                debug_out <= 8'b00000011;
+                rsrc1_value = lookup_gp_register(rsrc1);
+                rsrc2_value = lookup_gp_register(rsrc2);
+                state <= EXECUTE;
+            end
+            EXECUTE: begin
+                debug_out <= 8'b00000100;
+                if (control_signal.halt) begin
+                    state <= HALT;
+                end else begin
+                    address <= imem;
+                    state <= MEMORY;
+
+                    if (enable_jump) begin
+                        case (control_signal.jmp_src)
+                            JS_NO_JUMP_SRC: begin end // No Jump
+                            JS_JUMP_SRC_RSRC1: special_registers[0] <= rsrc1_value;
+                            JS_JUMP_SRC_IMMEDIATE: (* use_dsp = "yes" *) special_registers[0] <= special_registers[0] + immediate;
+                            JS_JUMP_SRC_ADDR: special_registers[0] <= imem;
+                            default: state <= HALT; // Invalid state
+                        endcase
+                    end
+                    
+                    if (control_signal.set_mode) begin
+                        internal_data_size <= control_signal.data_size;
+                        extend_sign <= control_signal.extend_sign;
+                    end
+                end
+            end
+            MEMORY: begin
+                debug_out <= 8'b00000101;
+                case (control_signal.write_memory_src)
+                    WM_WRITE_SRC_RSRC1: begin
+                        data_out <= lookup_gp_register(rsrc1);
+                        write_enable <= 1'b1;
+                    end
+                    WM_WRITE_SRC_IMMEDIATE: begin
+                        data_out <= immediate;
+                        write_enable <= 1'b1;
+                    end
+                endcase
+                state <= WRITEBACK;
+            end
+            WRITEBACK: begin;
+                debug_out <= 8'b00000110;
+                write_enable <= 1'b0;
+
+                case (control_signal.write_register_src)
+                    WR_WRITE_SRC_ALU: write_gp_register(rdest, alu_result);
+                    WR_WRITE_SRC_RSRC2: write_gp_register(rdest, rsrc2_value);
+                    WR_WRITE_SRC_MEMORY: write_gp_register(rdest, data_in);
+                    WR_WRITE_SRC_IMMEDIATE: write_gp_register(rdest, immediate);
+                endcase
+
+                state <= FETCH;
+                data_size <= 2'b10;
+                address <= special_registers[0];
+            end
+            HALT: begin
+                debug_out <= 8'b11111111;
+            end
+        endcase
+
         if (rst) begin
             state <= FETCH;
             address <= 32'b0;
@@ -106,119 +227,6 @@ module Core(
                 gp_registers[i] <= 32'b0;
                 special_registers[i] <= 32'b0;
             end
-        end else begin
-            case (state)
-                // TODO: If at edge of memory, 4 bytes could wrongly result in error
-                FETCH: begin
-                    opcode <= data_in[7:0];
-                    debug_out <= data_in[7:0];
-                    data_size <= internal_data_size;
-
-                    state <= DECODE;
-                    if (opcode_type != 3'b111) begin
-                        if (opcode_type[2]) begin
-                            rsrc1 <= data_in[15:12];
-                            rsrc2 <= data_in[11:8];
-                            // Let's assume that the first source is also the destination
-                            rdest <= data_in[15:12];
-                        end
-                        if (opcode_type[1]) begin
-                            data_size <= 2'b10;
-                            state <= FETCH_IMEM;
-                        end
-                        if (opcode_type[0]) begin
-                            if (internal_data_size[1]) begin
-                                data_size <= 2'b10;
-                                state <= FETCH_IMM;
-                            end else begin
-                                immediate <= enforce_constraints(internal_data_size[0] ?
-                                    opcode_type[2] ? {16'b0, data_in[31:16]} : {16'b0, data_in[23:8]} :
-                                    opcode_type[2] ? {24'b0, data_in[23:16]} : {24'b0, data_in[15:8]});
-                            end
-                        end
-                    end
-                    address <= ip_next;
-                    special_registers[0] <= ip_next;
-                end
-                FETCH_IMM: begin
-                    debug_out <= 8'b00000001;
-                    immediate <= enforce_constraints({24'b0, data_in[15:8]});
-                    data_size <= opcode_type[1] ? 2'b10 : internal_data_size;
-                    address <= ip_p4;
-                    special_registers[0] <= ip_p4;
-                    state <= opcode_type[1] ? FETCH_IMEM : DECODE;
-                end
-                FETCH_IMEM: begin
-                    debug_out <= 8'b00000010;
-                    imem <= data_in;
-                    data_size <= internal_data_size;
-                    address <= ip_p4;
-                    special_registers[0] <= ip_p4;
-                    state <= DECODE;
-                end
-                DECODE: begin
-                    debug_out <= 8'b00000011;
-                    rsrc1_value = lookup_gp_register(rsrc1);
-                    rsrc2_value = lookup_gp_register(rsrc2);
-                    state <= EXECUTE;
-                end
-                EXECUTE: begin
-                    debug_out <= 8'b00000100;
-                    if (control_signal.halt) begin
-                        state <= HALT;
-                    end else begin
-                        address <= imem;
-                        state <= MEMORY;
-
-                        if (enable_jump) begin
-                            case (control_signal.jmp_src)
-                                JS_NO_JUMP_SRC: begin end // No Jump
-                                JS_JUMP_SRC_RSRC1: special_registers[0] <= rsrc1_value;
-                                JS_JUMP_SRC_IMMEDIATE: (* use_dsp = "yes" *) special_registers[0] <= special_registers[0] + immediate;
-                                JS_JUMP_SRC_ADDR: special_registers[0] <= imem;
-                                default: state <= HALT; // Invalid state
-                            endcase
-                        end
-                        
-                        if (control_signal.set_mode) begin
-                            internal_data_size <= control_signal.data_size;
-                            extend_sign <= control_signal.extend_sign;
-                        end
-                    end
-                end
-                MEMORY: begin
-                    debug_out <= 8'b00000101;
-                    case (control_signal.write_memory_src)
-                        WM_WRITE_SRC_RSRC1: begin
-                            data_out <= lookup_gp_register(rsrc1);
-                            write_enable <= 1'b1;
-                        end
-                        WM_WRITE_SRC_IMMEDIATE: begin
-                            data_out <= immediate;
-                            write_enable <= 1'b1;
-                        end
-                    endcase
-                    state <= WRITEBACK;
-                end
-                WRITEBACK: begin;
-                    debug_out <= 8'b00000110;
-                    write_enable <= 1'b0;
-
-                    case (control_signal.write_register_src)
-                        WR_WRITE_SRC_ALU: write_gp_register(rdest, alu_result);
-                        WR_WRITE_SRC_RSRC2: write_gp_register(rdest, rsrc2_value);
-                        WR_WRITE_SRC_MEMORY: write_gp_register(rdest, data_in);
-                        WR_WRITE_SRC_IMMEDIATE: write_gp_register(rdest, immediate);
-                    endcase
-
-                    state <= FETCH;
-                    data_size <= 2'b10;
-                    address <= special_registers[0];
-                end
-                HALT: begin
-                    debug_out <= 8'b11111111;
-                end
-            endcase
         end
     end
 

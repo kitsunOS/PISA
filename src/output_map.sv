@@ -13,8 +13,7 @@ module OutputMap(
         if (output_write_enable && output_address == 0) begin
             led <= output_in[7:0];
         end
+        output_out <= {24'b0, led};
     end
-
-    assign output_out = {24'b0, led};
 
 endmodule

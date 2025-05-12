@@ -42,8 +42,6 @@ typedef enum logic [2:0] {
 } jump_condition_enum_t;
 
 module CU(
-    input logic clk,
-    input logic rst,
     input logic [7:0] opcode,
     output logic [3:0] alu_opcode,
     output control_signal_t control_signal
@@ -90,17 +88,17 @@ module CU(
         op_stoa | op_loda |
         op_smode;
 
-    assign control_signal.halt = !rst & (op_hlt | !is_valid_opcode);
+    assign control_signal.halt = op_hlt | !is_valid_opcode;
     assign control_signal.rsrc1_special = 0;
     assign control_signal.rdest_special = 0;
-    assign control_signal.alu_b_use_immediate = !rst & has_immediate;
-    assign control_signal.write_register_src = rst ? WR_NO_WRITE_SRC :
+    assign control_signal.alu_b_use_immediate = has_immediate;
+    assign control_signal.write_register_src =
         is_plain_arithmatic ? WR_WRITE_SRC_ALU :
         op_cpy ? WR_WRITE_SRC_RSRC2 :
         op_cpyi ? WR_WRITE_SRC_IMMEDIATE :
         op_loda ? WR_WRITE_SRC_MEMORY : WR_NO_WRITE_SRC;
-    assign control_signal.write_memory_src = !rst & op_stoa ? WM_WRITE_SRC_RSRC1 : WM_NO_WRITE_SRC;
-    assign control_signal.jmp_src = rst ? JS_NO_JUMP_SRC :
+    assign control_signal.write_memory_src = op_stoa ? WM_WRITE_SRC_RSRC1 : WM_NO_WRITE_SRC;
+    assign control_signal.jmp_src =
         op_jmpr ? JS_JUMP_SRC_IMMEDIATE :
         op_jmpa ? JS_JUMP_SRC_ADDR :
         op_jer ? JS_JUMP_SRC_IMMEDIATE :
@@ -109,10 +107,10 @@ module CU(
         op_jler ? JS_JUMP_SRC_IMMEDIATE :
         op_jmpto ? JS_JUMP_SRC_RSRC1 :
         JS_NO_JUMP_SRC;
-    assign control_signal.jump_condition = rst ? JC_ALWAYS : opcode[2:0];
-    assign control_signal.set_mode = rst ? 1'b0 : op_smode;
-    assign control_signal.data_size = rst ? 2'b00 : opcode[1:0];
-    assign control_signal.extend_sign = rst ? 1'b0 : opcode[4];
+    assign control_signal.jump_condition = opcode[2:0];
+    assign control_signal.set_mode = op_smode;
+    assign control_signal.data_size = opcode[1:0];
+    assign control_signal.extend_sign = opcode[4];
 
     assign alu_opcode = opcode[3:0];
     
