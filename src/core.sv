@@ -67,7 +67,7 @@ module Core(
             JC_IF_NOT_ZERO: enable_jump = (rsrc1_value != 32'b0);
             JC_IF_NEGATIVE: enable_jump = rsrc1_value[31];
             JC_IF_NOT_NEGATIVE: enable_jump = ~rsrc1_value[31];
-            default: enable_jump <= 1'b0; // Invalid state
+            default: enable_jump = 1'b0; // Invalid state
         endcase
     end
 
