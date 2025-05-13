@@ -1,11 +1,14 @@
 module workbench(
     input clk,
     input btnU,
+    input RsRx,
     input logic [15:0] sw,
     output logic [15:0] led
 );
 
-    logic rst = 1'b1;
+    logic rst;
+    logic p_ready;
+    initial rst = 1'b1;
 
     logic m_clk = 1'b0;
 
@@ -20,7 +23,7 @@ module workbench(
 
     Core processor_core (
         .clk(a_clk),
-        .rst(rst),
+        .rst(rst | ~p_ready),
         .data_in(data_in),
         .data_out(data_out),
         .address(address),
@@ -29,12 +32,35 @@ module workbench(
         .debug_out(led[15:8])
     );
 
+    (* ram_style = "distributed" *)
     logic [7:0] code [0:255];
     logic [31:0] code_address;
     logic [31:0] code_out;
     assign code_out = {code[code_address + 3], code[code_address + 2], code[code_address + 1], code[code_address]};
-    initial begin
-        $readmemh("program.hex", code);
+
+    logic code_byte_ready;
+    logic [7:0] code_setup_addr = 8'h00;
+    logic [7:0] code_setup_data;
+    UART uart(
+        .clk(clk),
+        .bit_in(RsRx),
+        .data_out(code_setup_data),
+        .data_ready(code_byte_ready)
+    );
+
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            code_setup_addr <= 8'h00;
+            p_ready <= 1'b0;
+        end else begin
+            if (code_byte_ready & ~p_ready) begin
+                code[code_setup_addr] <= code_setup_data;
+                code_setup_addr <= code_setup_addr + 1;
+            end
+            if (code_setup_addr == 8'hFF) begin
+                p_ready <= 1'b1;
+            end
+        end
     end
 
     logic [31:0] memory_address;
