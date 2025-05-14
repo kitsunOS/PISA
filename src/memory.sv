@@ -7,8 +7,10 @@ module Memory(
     output logic [31:0] memory_out
 );
 
-    logic [29:0] base = memory_address[31:2];
-    logic [1:0] offset = memory_address[1:0];
+    logic [29:0] base;
+    logic [1:0] offset;
+    assign base = memory_address[31:2];
+    assign offset = memory_address[1:0];
 
     logic [29:0] address_part[0:3];
     logic enable[0:3];

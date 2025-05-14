@@ -12,9 +12,6 @@ module workbench(
 
     logic m_clk = 1'b0;
 
-    logic a_clk;
-    assign a_clk = sw[15] ? clk : m_clk;
-
     logic [31:0] data_in;
     logic [31:0] data_out;
     logic [31:0] address;
@@ -22,8 +19,9 @@ module workbench(
     logic write_enable;
 
     Core processor_core (
-        .clk(a_clk),
+        .clk(clk),
         .rst(rst | ~p_ready),
+        .enable_step(sw[15] | m_clk),
         .data_in(data_in),
         .data_out(data_out),
         .address(address),
@@ -39,7 +37,7 @@ module workbench(
     assign code_out = {code[code_address + 3], code[code_address + 2], code[code_address + 1], code[code_address]};
 
     logic code_byte_ready;
-    logic [7:0] code_setup_addr = 8'h00;
+    logic [7:0] code_setup_addr;
     logic [7:0] code_setup_data;
     UART uart(
         .clk(clk),
@@ -53,12 +51,16 @@ module workbench(
             code_setup_addr <= 8'h00;
             p_ready <= 1'b0;
         end else begin
-            if (code_byte_ready & ~p_ready) begin
+            if (code_byte_ready & p_ready) begin
+                p_ready <= 1'b0;
+            end
+            if (code_byte_ready) begin
                 code[code_setup_addr] <= code_setup_data;
                 code_setup_addr <= code_setup_addr + 1;
             end
             if (code_setup_addr == 8'hFF) begin
                 p_ready <= 1'b1;
+                code_setup_addr <= 8'h00;
             end
         end
     end
@@ -70,7 +72,7 @@ module workbench(
     logic [31:0] memory_out;
 
     Memory memory(
-        .clk(a_clk),
+        .clk(clk),
         .memory_address(memory_address),
         .memory_in(memory_in),
         .memory_size(memory_size),
@@ -78,7 +80,8 @@ module workbench(
         .memory_out(memory_out)
     );
 
-    logic [31:0] input_in = {24'b0, sw};
+    logic [31:0] input_in;
+    assign input_in = {24'b0, sw};
 
     logic [31:0] output_in;
     logic [31:0] output_address;
@@ -87,7 +90,7 @@ module workbench(
     logic output_write_enable;
 
     OutputMap output_map(
-        .clk(a_clk),
+        .clk(clk),
         .output_address(output_address),
         .output_in(output_in),
         .output_size(output_size),
@@ -118,8 +121,8 @@ module workbench(
         .output_write_enable(output_write_enable)
     );
 
-    logic was_pressed = 1'b0;
-    logic [26:0] debounce_counter = 27'd0;
+    logic was_pressed;
+    logic [26:0] debounce_counter;
     
     always_ff @(posedge clk) begin
         rst <= 1'b0;
