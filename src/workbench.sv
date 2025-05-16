@@ -1,9 +1,14 @@
 module workbench(
     input clk,
-    input btnU,
-    input RsRx,
+    input logic btnU,
+    input logic RsRx,
     input logic [15:0] sw,
-    output logic [15:0] led
+    output logic [15:0] led,
+    output logic [3:0] vgaRed,
+    output logic [3:0] vgaGreen,
+    output logic [3:0] vgaBlue,
+    output logic Hsync,
+    output logic Vsync
 );
 
     logic rst;
@@ -11,6 +16,13 @@ module workbench(
     initial rst = 1'b1;
 
     logic m_clk = 1'b0;
+
+    logic clk_pixel;
+    clk_wiz_0 clk_gen (
+        .clk_pixel(clk_pixel),
+        .clk_in1(clk),
+        .reset(rst)
+    );
 
     logic [31:0] data_in;
     logic [31:0] data_out;
@@ -80,6 +92,26 @@ module workbench(
         .memory_out(memory_out)
     );
 
+    logic [31:0] vram_address;
+    logic [31:0] vram_in;
+    logic [1:0] vram_size;
+    logic vram_write_enable;
+    logic [31:0] vram_out;
+    logic [31:0] video_address;
+    logic [15:0] video_out;
+
+    VideoMemory vram(
+        .clk(clk),
+        .clk_pixel(clk_pixel),
+        .memory_address(vram_address),
+        .memory_in(vram_in),
+        .memory_size(vram_size),
+        .memory_write_enable(vram_write_enable),
+        .memory_out(vram_out),
+        .video_address(video_address),
+        .video_out(video_out)
+    );
+
     logic [31:0] input_in;
     assign input_in = {24'b0, sw};
 
@@ -106,19 +138,47 @@ module workbench(
         .data_in(data_out),
         .data_out(data_in),
         .memory_error(), // TODO: Handle memory error
+
         .code_in(code_out),
         .code_address(code_address),
+
         .memory_in(memory_out),
         .memory_address(memory_address),
         .memory_out(memory_in),
         .memory_size(memory_size),
         .memory_write_enable(memory_write_enable),
+
+        .vram_in(vram_out),
+        .vram_address(vram_address),
+        .vram_out(vram_in),
+        .vram_size(vram_size),
+        .vram_write_enable(vram_write_enable),
+
         .input_in(input_in),
+
         .output_in(output_out),
         .output_address(output_address),
         .output_out(output_in),
         .output_size(output_size),
         .output_write_enable(output_write_enable)
+    );
+
+    VGA vga(
+        .clk_pixel(clk_pixel),
+
+        .active_char(video_out[7:0]),
+        .active_foreground(video_out[11:8]),
+        .active_background(video_out[15:12]),
+        /*.active_char(8'h61),
+        .active_foreground(4'b1111),
+        .active_background(4'b0010),*/
+        .video_address(video_address),
+
+        .px_red(vgaRed),
+        .px_green(vgaGreen),
+        .px_blue(vgaBlue),
+        .hsync(Hsync),
+        .vsync(Vsync)
     );
 
     logic was_pressed;

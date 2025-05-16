@@ -15,6 +15,12 @@ module MemoryController(
     output logic [1:0] memory_size,
     output logic memory_write_enable,
 
+    input logic [31:0] vram_in,
+    output logic [31:0] vram_address,
+    output logic [31:0] vram_out,
+    output logic [1:0] vram_size,
+    output logic vram_write_enable,
+
     input logic [31:0] input_in,
 
     input logic [31:0] output_in,
@@ -24,60 +30,69 @@ module MemoryController(
     output logic output_write_enable
 );
 
-    localparam CODE_START = 10'd0;
-    localparam CODE_END = 10'd255;
-    localparam MEMORY_START = 10'd256;
-    localparam MEMORY_END = 10'd511;
-    localparam INPUT_START = 10'd512;
-    localparam INPUT_END = 10'd515;
-    localparam OUTPUT_START = 10'd516;
-    localparam OUTPUT_END = 10'd519;
+    localparam CODE_START = 32'd0;
+    localparam CODE_END = 32'd255;
+    localparam MEMORY_START = 32'd256;
+    localparam MEMORY_END = 32'd511;
+    localparam VRAM_START = 32'd512;
+    localparam VRAM_END = 32'd4511;
+    localparam INPUT_START = 32'd4512;
+    localparam INPUT_END = 32'd4515;
+    localparam OUTPUT_START = 32'd4516;
+    localparam OUTPUT_END = 32'd4519;
 
     logic [31:0] end_addr;
     logic is_code_range;
     logic is_memory_range;
+    logic is_vram_range;
     logic is_input_range;
     logic is_output_range;
     assign end_addr = end_address(address, data_size);
     assign is_code_range = (address >= CODE_START && end_addr <= CODE_END);
     assign is_memory_range = (address >= MEMORY_START && end_addr <= MEMORY_END);
+    assign is_vram_range = (address >= VRAM_START && end_addr <= VRAM_END);
     assign is_input_range = (address >= INPUT_START && end_addr <= INPUT_END);
     assign is_output_range = (address >= OUTPUT_START && end_addr <= OUTPUT_END);
 
     logic is_not_aligned;
     assign is_not_aligned =
         data_size == 2'b00 ? 1'b0 :
-        (data_size == 2'b01) && address[0] ? 1'b1 :
-        (data_size == 2'b10) && (|address[1:0]) ? 1'b1 :
+        (data_size == 2'b01) & address[0] ? 1'b1 :
+        (data_size == 2'b10) & (|address[1:0]) ? 1'b1 :
         1'b0;
 
     logic bad_data_size;
     assign bad_data_size = data_size == 2'b11;
     assign memory_error =
         (is_not_aligned && !is_code_range)
-        || bad_data_size
-        || (write_enable && !(is_memory_range || is_output_range))
-        || (!write_enable && !(is_code_range || is_memory_range || is_input_range || is_output_range));
+        | bad_data_size
+        | (write_enable & !(is_memory_range | is_vram_range | is_output_range))
+        | (!write_enable & !(is_code_range | is_memory_range | is_vram_range | is_input_range | is_output_range));
 
     logic [31:0] input_address;
     assign code_address = address - CODE_START;
     assign memory_address = address - MEMORY_START;
+    assign vram_address = address - VRAM_START;
     assign input_address = address - INPUT_START;
     assign output_address = address - OUTPUT_START;
 
     assign memory_size = data_size;
+    assign vram_size = data_size;
     assign output_size = data_size;
 
-    assign memory_write_enable = write_enable && is_memory_range && !memory_error;
-    assign output_write_enable = write_enable && is_output_range && !memory_error;
+    assign memory_write_enable = write_enable & is_memory_range & !memory_error;
+    assign vram_write_enable = write_enable & is_vram_range & !memory_error;
+    assign output_write_enable = write_enable & is_output_range & !memory_error;
     assign memory_out = data_in;
+    assign vram_out = data_in;
     assign output_out = data_in;
 
     logic [31:0] data_out_raw;
     assign data_out_raw =
-        memory_error || write_enable ? 32'b0 :
+        memory_error | write_enable ? 32'b0 :
         is_code_range ? code_in :
         is_memory_range ? memory_in :
+        is_vram_range ? vram_in :
         is_input_range ? input_in :
         is_output_range ? output_in :
         32'b0;

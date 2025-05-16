@@ -88,12 +88,11 @@ module Core(
     logic imm_fetch = internal_data_size[1];
     assign ip_inc =
         opcode_type == 3'b111 ? 1 :
-        1 + opcode_type[2]
-            + ((~opcode_type[0] | imm_fetch) ? 0 : 1);
+        (1 + opcode_type[2]
+            + ((~opcode_type[0] | imm_fetch) ? 0 : 1));
 
-    logic [31:0] ip_next, ip_p4;
-    assign ip_next = special_registers[0] + ip_inc;
-    assign ip_p4 = special_registers[0] + 4;
+    logic [31:0] ip_next;
+    assign ip_next = special_registers[0] + (state == FETCH ? ip_inc : 4);
 
     logic [31:0] write_buffer;
     logic write_buffer_valid;
@@ -102,21 +101,19 @@ module Core(
         address <=
             rst | state == HALT ? 32'b0 :
             ~enable_step ? address :
-            state == FETCH ? ip_next :
-            state == EXECUTE ? imem :
-            state == MEMORY ? imem :
+            (state == EXECUTE | state == MEMORY) ? imem :
             state == WRITEBACK ? special_registers[0] :
-            ip_p4;
+            ip_next;
+
+        rsrc1_value <= lookup_gp_register(rsrc1);
+        rsrc2_value <= lookup_gp_register(rsrc2);
 
         if (state == FETCH) opcode <= data_in[7:0];
-        write_enable <= enable_step & state == MEMORY & control_signal.write_memory_src != WM_NO_WRITE_SRC;
+        write_enable <= enable_step & state == MEMORY & (control_signal.write_memory_src != WM_NO_WRITE_SRC);
         data_out <=
             control_signal.write_memory_src == WM_WRITE_SRC_RSRC1 ? rsrc1_value :
             control_signal.write_memory_src == WM_WRITE_SRC_IMMEDIATE ? immediate :
             32'b0;
-
-        rsrc1_value <= lookup_gp_register(rsrc1);
-        rsrc2_value <= lookup_gp_register(rsrc2);
 
         if (state == FETCH) begin
             immediate <= enforce_constraints(internal_data_size[0] ?
@@ -137,7 +134,7 @@ module Core(
             case (control_signal.jmp_src)
                 JS_NO_JUMP_SRC: begin end // No Jump
                 JS_JUMP_SRC_RSRC1: special_registers[0] <= rsrc1_value;
-                JS_JUMP_SRC_IMMEDIATE: (* use_dsp = "yes" *) special_registers[0] <= special_registers[0] + immediate;
+                JS_JUMP_SRC_IMMEDIATE: special_registers[0] <= special_registers[0] + immediate;
                 JS_JUMP_SRC_ADDR: special_registers[0] <= imem;
             endcase
         end
@@ -155,6 +152,7 @@ module Core(
         end
         if (write_buffer_valid) begin
             write_gp_register(rdest, write_buffer);
+            write_buffer_valid <= 1'b0;
         end
         
         if (control_signal.set_mode) begin
@@ -194,11 +192,11 @@ module Core(
             end
             FETCH_IMM: begin
                 data_size <= opcode[6] ? 2'b10 : internal_data_size;
-                special_registers[0] <= ip_p4;
+                special_registers[0] <= ip_next;
             end
             FETCH_IMEM: begin
                 data_size <= internal_data_size;
-                special_registers[0] <= ip_p4;
+                special_registers[0] <= ip_next;
             end
             WRITEBACK: begin;
                 data_size <= 2'b10;
@@ -221,7 +219,7 @@ module Core(
         input [2:0] index;
         input [31:0] value;
         begin
-            case (data_size)
+            case (internal_data_size)
                 2'b00: gp_registers[index][7:0] <= value[7:0];
                 2'b01: gp_registers[index][15:0] <= value[15:0];
                 2'b10, 2'b11: gp_registers[index] <= value;
