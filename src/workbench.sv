@@ -169,9 +169,6 @@ module workbench(
         .active_char(video_out[7:0]),
         .active_foreground(video_out[11:8]),
         .active_background(video_out[15:12]),
-        /*.active_char(8'h61),
-        .active_foreground(4'b1111),
-        .active_background(4'b0010),*/
         .video_address(video_address),
 
         .px_red(vgaRed),

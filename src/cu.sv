@@ -1,17 +1,3 @@
-typedef struct packed {
-    logic halt;
-    logic rsrc1_special;
-    logic rdest_special;
-    logic alu_b_use_immediate;
-    logic [2:0] write_register_src;
-    logic [1:0] write_memory_src;
-    logic [1:0] jmp_src;
-    logic [2:0] jump_condition;
-    logic set_mode;
-    logic [1:0] data_size;
-    logic extend_sign;
-} control_signal_t;
-
 typedef enum logic [2:0] {
     WR_NO_WRITE_SRC = 3'd0,
     WR_WRITE_SRC_ALU = 3'd1,
@@ -25,6 +11,11 @@ typedef enum logic [1:0] {
     WM_WRITE_SRC_RSRC1 = 2'd1,
     WM_WRITE_SRC_IMMEDIATE = 2'd2
 } write_memory_src_enum_t;
+
+typedef enum logic {
+    MA_ADDR_SRC = 1'b0,
+    MA_RSRC2_SRC = 1'b1
+} memory_address_src_enum_t;
 
 typedef enum logic [1:0] {
     JS_NO_JUMP_SRC = 2'd0,
@@ -41,6 +32,18 @@ typedef enum logic [2:0] {
     JC_IF_NOT_NEGATIVE = 3'b101
 } jump_condition_enum_t;
 
+typedef struct packed {
+    logic halt;
+    logic rsrc1_special;
+    logic rdest_special;
+    logic alu_b_use_immediate;
+    write_register_src_enum_t write_register_src;
+    write_memory_src_enum_t write_memory_src;
+    memory_address_src_enum_t memory_address_src;
+    jump_src_enum_t jmp_src;
+    jump_condition_enum_t jump_condition;
+} control_signal_t;
+
 module CU(
     input logic [7:0] opcode,
     output logic [3:0] alu_opcode,
@@ -49,7 +52,7 @@ module CU(
 
     logic op_nop = opcode == 8'b00000000;
     logic op_hlt = opcode == 8'b00000011;
-    logic op_jmpr = opcode == 8'b00100000;
+    logic op_jmpr = opcode == 8'b00110000;
     logic op_jmpa = opcode == 8'b01000000;
     logic op_add = opcode == 8'b10000000;
     logic op_sub = opcode == 8'b10000001;
@@ -63,6 +66,8 @@ module CU(
     logic op_shra = opcode == 8'b10001010;
     // logic op_mod = opcode == 8'b10001100;
     logic op_cpy = opcode == 8'b10010000;
+    logic op_stoar = opcode == 8'b10010100;
+    logic op_lodar = opcode == 8'b10010101;
     logic op_jmpto = opcode == 8'b10011000;
     logic op_addi = opcode == 8'b10100000;
     logic op_subi = opcode == 8'b10100001;
@@ -73,7 +78,6 @@ module CU(
     logic op_jler = opcode == 8'b10110101;
     logic op_stoa = opcode == 8'b11010000;
     logic op_loda = opcode == 8'b11010001;
-    logic op_smode = opcode[7:5] == 3'b111;
 
     logic has_immediate = opcode[5];
     logic is_plain_arithmatic =
@@ -82,11 +86,11 @@ module CU(
     logic is_valid_opcode =
         op_nop | op_hlt | op_jmpr | op_jmpa |
         op_add | op_sub | op_mul | op_and | op_or | op_xor |
-        op_shl | op_shr | op_shra | op_cpy | op_jmpto |
+        op_shl | op_shr | op_shra | op_cpy |
+        op_stoar | op_lodar | op_jmpto |
         op_addi | op_subi | op_cpyi |
         op_jer | op_jner | op_jlr | op_jler |
-        op_stoa | op_loda |
-        op_smode;
+        op_stoa | op_loda;
 
     assign control_signal.halt = op_hlt | !is_valid_opcode;
     assign control_signal.rsrc1_special = 0;
@@ -96,8 +100,9 @@ module CU(
         is_plain_arithmatic ? WR_WRITE_SRC_ALU :
         op_cpy ? WR_WRITE_SRC_RSRC2 :
         op_cpyi ? WR_WRITE_SRC_IMMEDIATE :
-        op_loda ? WR_WRITE_SRC_MEMORY : WR_NO_WRITE_SRC;
-    assign control_signal.write_memory_src = op_stoa ? WM_WRITE_SRC_RSRC1 : WM_NO_WRITE_SRC;
+        op_loda | op_lodar ? WR_WRITE_SRC_MEMORY : WR_NO_WRITE_SRC;
+    assign control_signal.write_memory_src = op_stoa | op_stoar ? WM_WRITE_SRC_RSRC1 : WM_NO_WRITE_SRC;
+    assign control_signal.memory_address_src = op_stoar | op_lodar ? MA_RSRC2_SRC : MA_ADDR_SRC;
     assign control_signal.jmp_src =
         op_jmpr ? JS_JUMP_SRC_IMMEDIATE :
         op_jmpa ? JS_JUMP_SRC_ADDR :
@@ -107,10 +112,7 @@ module CU(
         op_jler ? JS_JUMP_SRC_IMMEDIATE :
         op_jmpto ? JS_JUMP_SRC_RSRC1 :
         JS_NO_JUMP_SRC;
-    assign control_signal.jump_condition = opcode[2:0];
-    assign control_signal.set_mode = op_smode;
-    assign control_signal.data_size = opcode[1:0];
-    assign control_signal.extend_sign = opcode[4];
+    assign control_signal.jump_condition = jump_condition_enum_t'(opcode[2:0]);
 
     assign alu_opcode = opcode[3:0];
     
