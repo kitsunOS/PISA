@@ -32,14 +32,18 @@ module IFU(
     logic is_prefix;
     assign is_prefix = opcode_type == 3'b111;
 
-    logic [31:0] ip_inc;
-    logic imm_fetch = immediate_data_size[1];
-    assign ip_inc =
-        data_in[7:0] == 8'b11100000 ? 2 :
-        (1 + opcode_type[2]
-            + ((~opcode_type[0] | imm_fetch) ? 0 : (immediate_data_size[0] ? 2 : 1)));
+    logic [2:0] ip_inc;
 
-    assign ip_next = ip_cur + (state == FETCH ? ip_inc : 4);
+    logic [2:0] ip_inc_sel;
+    assign ip_inc_sel = { ~opcode_type[0] | immediate_data_size[1], opcode_type[2], immediate_data_size[0] };
+    logic [2:0] ip_inc_options [0:7];
+    assign ip_inc_options = '{ 
+        3'b010, 3'b011, 3'b011, 3'b100,
+        3'b001, 3'b001, 3'b010, 3'b010
+    };
+
+    assign ip_inc = ip_inc_options[ip_inc_sel];
+    assign ip_next = ip_cur + (is_prefix ? 2 : state == FETCH ? ip_inc : 4);
     assign is_active = state == FETCH || state == FETCH_IMM || state == FETCH_IMEM;
 
     assign next_state =

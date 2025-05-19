@@ -72,7 +72,7 @@ module VideoMemory(
                 .DOA(memory_out_part[i]),
                 .DIA(reordered_memory_in[(8*i)+7 -: 8]),
                 .ADDRA(address_part[i]),
-                .WEA(memory_write_enable & enable[i]),
+                .WEA(memory_write_enable),
                 .ENA(enable[i]),
                 .CLKA(clk),
 

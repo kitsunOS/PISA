@@ -17,14 +17,12 @@ module RegisterFile(
 
     (* ram_style = "distributed" *) logic [31:0] gp_registers[0:7];
 
-    logic [31:0] old_reg_value;
-    logic [31:0] new_reg_value;
-    assign old_reg_value = gp_registers[rdest];
+    logic [3:0] byte_enable;
     always_comb begin
         unique case (data_size)
-            2'b00: new_reg_value = {old_reg_value[31:8], write_data[7:0]};
-            2'b01: new_reg_value = {old_reg_value[31:16], write_data[15:0]};
-            2'b10, 2'b11: new_reg_value = write_data;
+            2'b00: byte_enable = 4'b0001;
+            2'b01: byte_enable = 4'b0011;
+            default: byte_enable = 4'b1111;
         endcase
     end
 
@@ -34,7 +32,11 @@ module RegisterFile(
                 gp_registers[i] <= 32'b0;
             end
         end else if (write_enable) begin
-            gp_registers[rdest] <= new_reg_value;
+            for (int i = 0; i < 4; i++) begin
+                if (byte_enable[i]) begin
+                    gp_registers[rdest][i*8 +: 8] <= write_data[i*8 +: 8];
+                end
+            end
         end
 
         rsrc1_value <= enforce_constraints(data_size, extend_sign, gp_registers[rsrc1]);
