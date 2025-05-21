@@ -6,10 +6,9 @@ typedef enum logic [2:0] {
     WR_WRITE_SRC_IMMEDIATE = 3'd4
 } write_register_src_enum_t;
 
-typedef enum logic [1:0] {
+typedef enum logic {
     WM_NO_WRITE_SRC = 2'd0,
-    WM_WRITE_SRC_RSRC1 = 2'd1,
-    WM_WRITE_SRC_IMMEDIATE = 2'd2
+    WM_WRITE_SRC_RSRC1 = 2'd1
 } write_memory_src_enum_t;
 
 typedef enum logic {

@@ -33,7 +33,7 @@ module workbench(
     Core processor_core (
         .clk(clk),
         .rst(rst | ~p_ready),
-        .enable_step(sw[15] | m_clk),
+        .enable_step(sw[15] | m_clk | rst),
         .data_in(data_in),
         .data_out(data_out),
         .address(address),
@@ -132,6 +132,9 @@ module workbench(
     );
 
     MemoryController mem_controller (
+        .clk(clk),
+        .enable_step(sw[15] | m_clk | ~p_ready),
+        
         .address(address),
         .write_enable(write_enable),
         .data_size(data_size),

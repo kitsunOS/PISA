@@ -46,7 +46,7 @@ module ALU(
             4'b1000: result = sll_res;
             4'b1001: result = srl_res;
             4'b1010: result = sra_res;
-            // 4'b1100: result = mod_res;
+            // 4'b1100: result = mod_res;j
             default: result = 32'b0;
         endcase
     end
